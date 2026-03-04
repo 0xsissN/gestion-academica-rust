@@ -1,3 +1,4 @@
+use crate::adapters::http::responses::api_response::ApiResponse;
 use crate::state::AppState;
 use axum::{
     Json,
@@ -32,19 +33,19 @@ pub struct UpdateEnrollment {
 
 pub async fn get_enrollments(
     State(state): State<AppState>,
-) -> Result<Json<Vec<Enrollment>>, StatusCode> {
+) -> Result<(StatusCode, Json<ApiResponse<Vec<Enrollment>>>), StatusCode> {
     let enrollments = sqlx::query_as::<_, Enrollment>("SELECT * FROM enrollment")
         .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(enrollments))
+    Ok(ApiResponse::ok(enrollments))
 }
 
 pub async fn get_enrollment_by_id(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<Json<Enrollment>, StatusCode> {
+) -> Result<(StatusCode, Json<ApiResponse<Enrollment>>), StatusCode> {
     let enrollment = sqlx::query_as::<_, Enrollment>("SELECT * FROM enrollment WHERE id = $1")
         .bind(&id)
         .fetch_optional(&state.db)
@@ -52,7 +53,7 @@ pub async fn get_enrollment_by_id(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     match enrollment {
-        Some(enrollment) => Ok(Json(enrollment)),
+        Some(enrollment) => Ok(ApiResponse::ok(enrollment)),
         None => Err(StatusCode::NOT_FOUND),
     }
 }
@@ -60,7 +61,7 @@ pub async fn get_enrollment_by_id(
 pub async fn create_enrollment(
     State(state): State<AppState>,
     Json(payload): Json<CreateEnrollment>,
-) -> Result<(StatusCode, Json<Enrollment>), StatusCode> {
+) -> Result<(StatusCode, Json<ApiResponse<Enrollment>>), StatusCode> {
     let enrollment = sqlx::query_as::<_, Enrollment>(
         "INSERT INTO enrollment (student_id, course_id) VALUES ($1, $2) RETURNING *",
     )
@@ -70,34 +71,33 @@ pub async fn create_enrollment(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok((StatusCode::CREATED, Json(enrollment)))
+    Ok(ApiResponse::created(enrollment))
 }
 
 pub async fn update_enrollment(
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(payload): Json<UpdateEnrollment>,
-) -> Result<StatusCode, StatusCode> {
-    let result = sqlx::query("UPDATE enrollment SET grade = COALESCE($1, grade), student_id = COALESCE($2, student_id), course_id = COALESCE($3, course_id) WHERE id = $4")
+) -> Result<(StatusCode, Json<ApiResponse<Enrollment>>), StatusCode> {
+    let result = sqlx::query_as::<_, Enrollment>("UPDATE enrollment SET grade = COALESCE($1, grade), student_id = COALESCE($2, student_id), course_id = COALESCE($3, course_id) WHERE id = $4 RETURNING *")
         .bind(&payload.grade)
         .bind(&payload.student_id)
         .bind(&payload.course_id)
         .bind(&id)
-        .execute(&state.db)
+        .fetch_optional(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if result.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
+    match result {
+        Some(enrollment) => Ok(ApiResponse::ok(enrollment)),
+        None => Err(StatusCode::NOT_FOUND),
     }
-
-    Ok(StatusCode::OK)
 }
 
 pub async fn delete_enrollment(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<StatusCode, StatusCode> {
+) -> Result<(StatusCode, Json<ApiResponse<String>>), StatusCode> {
     let result = sqlx::query("UPDATE enrollment SET is_active = false WHERE id = $1")
         .bind(&id)
         .execute(&state.db)
@@ -108,5 +108,7 @@ pub async fn delete_enrollment(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    Ok(StatusCode::OK)
+    Ok(ApiResponse::ok(
+        "Enrollment deleted successfully".to_string(),
+    ))
 }
