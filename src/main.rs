@@ -1,4 +1,5 @@
 mod adapters;
+mod errors;
 mod infrastructure;
 mod state;
 

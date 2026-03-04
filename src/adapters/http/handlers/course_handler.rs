@@ -1,9 +1,9 @@
 use crate::adapters::http::responses::api_response::ApiResponse;
+use crate::errors::app_error::AppError;
 use crate::state::AppState;
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -35,11 +35,10 @@ pub struct UpdateCourse {
 
 pub async fn get_courses(
     State(state): State<AppState>,
-) -> Result<(StatusCode, Json<ApiResponse<Vec<Course>>>), StatusCode> {
+) -> Result<ApiResponse<Vec<Course>>, AppError> {
     let courses = sqlx::query_as::<_, Course>("SELECT * FROM course")
         .fetch_all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .await?;
 
     Ok(ApiResponse::ok(courses))
 }
@@ -47,23 +46,22 @@ pub async fn get_courses(
 pub async fn get_course_by_id(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<(StatusCode, Json<ApiResponse<Course>>), StatusCode> {
+) -> Result<ApiResponse<Course>, AppError> {
     let course = sqlx::query_as::<_, Course>("SELECT * FROM course WHERE id = $1")
         .bind(&id)
         .fetch_optional(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .await?;
 
     match course {
         Some(course) => Ok(ApiResponse::ok(course)),
-        None => Err(StatusCode::NOT_FOUND),
+        None => Err(AppError::NotFound),
     }
 }
 
 pub async fn create_course(
     State(state): State<AppState>,
     Json(payload): Json<CreateCourse>,
-) -> Result<(StatusCode, Json<ApiResponse<Course>>), StatusCode> {
+) -> Result<ApiResponse<Course>, AppError> {
     let course = sqlx::query_as::<_, Course>(
         "INSERT INTO course (name, credits, career_id) VALUES ($1, $2, $3) RETURNING *",
     )
@@ -71,8 +69,7 @@ pub async fn create_course(
     .bind(&payload.credits)
     .bind(&payload.career_id)
     .fetch_one(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .await?;
 
     Ok(ApiResponse::created(course))
 }
@@ -81,7 +78,7 @@ pub async fn update_course(
     State(state): State<AppState>,
     Path(id): Path<i32>,
     Json(payload): Json<UpdateCourse>,
-) -> Result<(StatusCode, Json<ApiResponse<Course>>), StatusCode> {
+) -> Result<ApiResponse<Course>, AppError> {
     let result = sqlx::query_as::<_, Course>(
         "UPDATE course SET name = COALESCE($1, name), is_active = COALESCE($2, is_active), credits = COALESCE($3, credits), career_id = COALESCE($4, career_id) WHERE id = $5 RETURNING *",
     )
@@ -91,28 +88,26 @@ pub async fn update_course(
     .bind(&payload.career_id)
     .bind(&id)
     .fetch_optional(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .await?;
 
     match result {
         Some(course) => Ok(ApiResponse::ok(course)),
-        None => Err(StatusCode::NOT_FOUND),
+        None => Err(AppError::NotFound),
     }
 }
 
 pub async fn delete_course(
     State(state): State<AppState>,
     Path(id): Path<i32>,
-) -> Result<(StatusCode, Json<ApiResponse<String>>), StatusCode> {
+) -> Result<ApiResponse<()>, AppError> {
     let result = sqlx::query("UPDATE course SET is_active = false WHERE id = $1")
         .bind(&id)
         .execute(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .await?;
 
     if result.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(AppError::NotFound);
     }
 
-    Ok(ApiResponse::ok("Course deleted successfully".to_string()))
+    Ok(ApiResponse::no_content())
 }
