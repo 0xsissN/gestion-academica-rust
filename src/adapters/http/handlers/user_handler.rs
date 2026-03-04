@@ -51,15 +51,15 @@ pub async fn get_user_by_id(
     Path(id): Path<Uuid>,
 ) -> Result<Json<User>, StatusCode> {
     let user = sqlx::query_as::<_, User>("SELECT * FROM \"user\" WHERE id = $1")
-        .bind(id)
-        .fetch_one(&state.db)
+        .bind(&id)
+        .fetch_optional(&state.db)
         .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => StatusCode::NOT_FOUND,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        })?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    Ok(Json(user))
+    match user {
+        Some(user) => Ok(Json(user)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
 }
 
 pub async fn create_user(
@@ -84,16 +84,20 @@ pub async fn update_user(
     Path(id): Path<Uuid>,
     Json(payload): Json<UpdateUser>,
 ) -> Result<StatusCode, StatusCode> {
-    let _user = sqlx::query_as::<_, User>("UPDATE \"user\" SET username = $1, first_name = $2, last_name = $3, is_active = $4, role_id = $5 WHERE id = $6 RETURNING *")
+    let result = sqlx::query("UPDATE \"user\" SET username = COALESCE($1, username), first_name = COALESCE($2, first_name), last_name = COALESCE($3, last_name), is_active = COALESCE($4, is_active), role_id = COALESCE($5, role_id) WHERE id = $6")
         .bind(&payload.username)
         .bind(&payload.first_name)
         .bind(&payload.last_name)
         .bind(&payload.is_active)
         .bind(&payload.role_id)
-        .bind(id)
-        .fetch_one(&state.db)
+        .bind(&id)
+        .execute(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
 
     Ok(StatusCode::OK)
 }
@@ -102,11 +106,15 @@ pub async fn delete_user(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    sqlx::query("DELETE FROM \"user\" WHERE id = $1")
-        .bind(id)
+    let result = sqlx::query("UPDATE \"user\" SET is_active = false WHERE id = $1")
+        .bind(&id)
         .execute(&state.db)
         .await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if result.rows_affected() == 0 {
+        return Err(StatusCode::NOT_FOUND);
+    }
 
     Ok(StatusCode::OK)
 }
