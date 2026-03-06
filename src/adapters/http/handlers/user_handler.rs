@@ -1,42 +1,14 @@
+use crate::adapters::http::dto::user_dto::*;
 use crate::adapters::http::responses::api_response::ApiResponse;
+use crate::auth::password::hash_password;
+use crate::domain::models::user::User;
 use crate::errors::app_error::AppError;
 use crate::state::AppState;
 use axum::{
     Json,
     extract::{Path, State},
 };
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use uuid::Uuid;
-
-#[derive(Debug, Deserialize, FromRow, Serialize)]
-pub struct User {
-    pub id: Uuid,
-    pub username: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub is_active: bool,
-    pub created_at: chrono::NaiveDateTime,
-    pub role_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateUser {
-    pub username: String,
-    pub password_hash: String,
-    pub first_name: String,
-    pub last_name: String,
-    pub role_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateUser {
-    pub username: Option<String>,
-    pub first_name: Option<String>,
-    pub last_name: Option<String>,
-    pub is_active: Option<bool>,
-    pub role_id: Option<i32>,
-}
 
 pub async fn get_users(State(state): State<AppState>) -> Result<ApiResponse<Vec<User>>, AppError> {
     let users = sqlx::query_as::<_, User>("SELECT * FROM \"user\"")
@@ -65,9 +37,12 @@ pub async fn create_user(
     State(state): State<AppState>,
     Json(payload): Json<CreateUser>,
 ) -> Result<ApiResponse<User>, AppError> {
+    let password_hash =
+        hash_password(&payload.password_hash).map_err(|_| AppError::InternalServerError)?;
+
     let user = sqlx::query_as::<_, User>("INSERT INTO \"user\" (username, password_hash, first_name, last_name, role_id) VALUES ($1, $2, $3, $4, $5) RETURNING *")
         .bind(&payload.username)
-        .bind(&payload.password_hash)
+        .bind(&password_hash)
         .bind(&payload.first_name)
         .bind(&payload.last_name)
         .bind(&payload.role_id)

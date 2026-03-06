@@ -16,4 +16,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "std", 
 anyhow = "1"
 thiserror = "2.0"
 dotenvy = "0.15"
-
+jsonwebtoken = "9.2.0"
+argon2 = "0.5.3"
+rand_core = "0.10.0"

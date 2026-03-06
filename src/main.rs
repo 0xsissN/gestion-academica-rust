@@ -1,11 +1,13 @@
 mod adapters;
+mod auth;
+mod domain;
 mod errors;
 mod infrastructure;
 mod state;
 
 use adapters::http::routes::{
-    career_route::career_router, course_route::course_router, enrollment_route::enrollment_router,
-    user_route::user_router,
+    auth_route::auth_router, career_route::career_router, course_route::course_router,
+    enrollment_route::enrollment_router, user_route::user_router,
 };
 use axum::{Router, routing::get};
 use infrastructure::{config::AppConfig, database::create_pool};
@@ -26,6 +28,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/health", get(health_check))
+        .merge(auth_router())
         .merge(user_router())
         .merge(career_router())
         .merge(course_router())

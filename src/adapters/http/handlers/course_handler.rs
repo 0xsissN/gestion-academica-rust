@@ -1,37 +1,12 @@
+use crate::adapters::http::dto::course_dto::*;
 use crate::adapters::http::responses::api_response::ApiResponse;
+use crate::domain::models::course::Course;
 use crate::errors::app_error::AppError;
 use crate::state::AppState;
 use axum::{
     Json,
     extract::{Path, State},
 };
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-
-#[derive(Debug, Deserialize, Serialize, FromRow)]
-pub struct Course {
-    pub id: i32,
-    pub name: String,
-    pub is_active: bool,
-    pub credits: f32,
-    pub created_at: chrono::NaiveDateTime,
-    pub career_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateCourse {
-    pub name: String,
-    pub credits: f32,
-    pub career_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateCourse {
-    pub name: Option<String>,
-    pub is_active: Option<bool>,
-    pub credits: Option<f32>,
-    pub career_id: Option<i32>,
-}
 
 pub async fn get_courses(
     State(state): State<AppState>,

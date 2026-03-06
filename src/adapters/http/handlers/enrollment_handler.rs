@@ -1,35 +1,12 @@
+use crate::adapters::http::dto::enrollment_dto::*;
 use crate::adapters::http::responses::api_response::ApiResponse;
+use crate::domain::models::enrollment::Enrollment;
 use crate::errors::app_error::AppError;
 use crate::state::AppState;
 use axum::{
     Json,
     extract::{Path, State},
 };
-use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
-use uuid::Uuid;
-
-#[derive(Debug, Deserialize, Serialize, FromRow)]
-pub struct Enrollment {
-    pub id: i32,
-    pub enrollment_date: chrono::NaiveDateTime,
-    pub grade: f32,
-    pub student_id: Uuid,
-    pub course_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateEnrollment {
-    pub student_id: Uuid,
-    pub course_id: i32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpdateEnrollment {
-    pub grade: Option<f32>,
-    pub student_id: Option<Uuid>,
-    pub course_id: Option<i32>,
-}
 
 pub async fn get_enrollments(
     State(state): State<AppState>,
